@@ -1302,7 +1302,28 @@ public class ChannelStream implements Stream, Finalizable {
                 }
             }
         } else if (descriptor.getChannel() instanceof FileChannel) {
-            return fread(number);
+            // avoid fread since it is blocking
+            if (hasBufferedInputBytes()) {
+                // already have some bytes buffered, just return those
+                return bufferedRead(Math.min(bufferedInputBytesRemaining(), number));
+            } else {
+                // otherwise, we try an unbuffered read to get whatever's available
+
+                // TODO: under popen, this still blocks under some circumstances
+                // one option is to follow the STDIN approach - set the baseInputStream to the underlying one when the
+                // process was started and use:
+                //
+                // if (descriptor.getBaseInputStream() != null) {
+                //     return descriptor.getBaseInputStream().available() > 0 ? read(number) : new ByteList(0);
+                // } else {
+                //     return read(number);
+                // }
+                //
+                // However, at the moment this just converts the blocking back to an EAGAIN error - which is more
+                // correct, but not what the stream should have got itself into in the first place. See JRUBY-6235
+
+                return read(number);
+            }
         } else {
             return null;
         }
